@@ -3,8 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Game Cờ Vua Online</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
+    <title>Cờ Vua</title>
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -19,13 +18,12 @@
             min-height: 100vh;
             overflow: hidden;
         }
-        h1 { margin-bottom: 5px; font-size: 24px; color: #f1c40f; }
         #status {
-            margin-bottom: 12px;
-            font-size: 18px;
+            margin-bottom: 20px;
+            font-size: 22px;
             font-weight: bold;
             color: #2ecc71;
-            min-height: 26px;
+            min-height: 30px;
             text-align: center;
         }
         #board {
@@ -64,7 +62,7 @@
             color: #111111;
         }
         .btn {
-            margin-top: 15px;
+            margin-top: 20px;
             padding: 10px 24px;
             font-size: 17px;
             background-color: #2ecc71;
@@ -79,163 +77,308 @@
 </head>
 <body>
 
-    <h1>Game Cờ Vua Online</h1>
-    <div id="status">Đến lượt bạn (Trắng)</div>
+    <div id="status">Đến lượt bạn</div>
     <div id="board"></div>
     <button class="btn" onclick="resetGame()">Ván Mới</button>
 
     <script>
-        const game = new Chess();
-        const boardEl = document.getElementById('board');
-        const statusEl = document.getElementById('status');
-        let selectedSquare = null;
-
         const pieceSymbols = {
             'p': '♟', 'r': '♜', 'n': '♞', 'b': '♝', 'q': '♛', 'k': '♚',
             'P': '♙', 'R': '♖', 'N': '♘', 'B': '♗', 'Q': '♕', 'K': '♔'
         };
 
-        const pieceValues = { 'p': 10, 'n': 30, 'b': 30, 'r': 50, 'q': 90, 'k': 900 };
+        const pieceValues = { 'p': 10, 'n': 30, 'b': 30, 'r': 50, 'q': 90, 'k': 9999 };
+
+        let board = [];
+        let selectedSquare = null;
+        let turn = 'w';
+        let gameOver = false;
+
+        // Âm thanh tiếng kèn ăn mừng bằng Web Audio API
+        function playVictoryTrumpet() {
+            try {
+                const ctx = new (window.AudioContext || window.webkitAudioContext)();
+                const notes = [
+                    { f: 523.25, d: 0.15 }, // C5
+                    { f: 659.25, d: 0.15 }, // E5
+                    { f: 783.99, d: 0.15 }, // G5
+                    { f: 1046.50, d: 0.4 }  // C6
+                ];
+                let time = ctx.currentTime;
+                notes.forEach(n => {
+                    const osc = ctx.createOscillator();
+                    const gain = ctx.createGain();
+                    osc.type = 'triangle';
+                    osc.frequency.value = n.f;
+                    gain.gain.setValueAtTime(0.3, time);
+                    gain.gain.exponentialRampToValueAtTime(0.01, time + n.d);
+                    osc.connect(gain);
+                    gain.connect(ctx.destination);
+                    osc.start(time);
+                    osc.stop(time + n.d);
+                    time += n.d;
+                });
+            } catch (e) {}
+        }
 
         function triggerConfetti() {
+            playVictoryTrumpet();
             if (typeof confetti === 'function') {
-                confetti({
-                    particleCount: 120,
-                    spread: 80,
-                    origin: { y: 0.6 }
-                });
+                // Hiệu ứng pháo hoa rơi từ trên xuống
+                let end = Date.now() + (2 * 1000);
+                (function frame() {
+                    confetti({
+                        particleCount: 5,
+                        angle: 60,
+                        spread: 55,
+                        origin: { x: 0, y: 0 }
+                    });
+                    confetti({
+                        particleCount: 5,
+                        angle: 120,
+                        spread: 55,
+                        origin: { x: 1, y: 0 }
+                    });
+                    if (Date.now() < end) {
+                        requestAnimationFrame(frame);
+                    }
+                }());
             }
         }
 
-        function updateStatus() {
-            if (game.in_checkmate()) {
-                if (game.turn() === 'w') {
-                    statusEl.style.color = '#e74c3c';
-                    statusEl.textContent = 'RẤT TIẾC, BẠN ĐÃ THUA! 😿';
-                } else {
-                    statusEl.style.color = '#f1c40f';
-                    statusEl.textContent = 'CHÚC MỪNG BẠN ĐÃ THẮNG! 🎉';
-                    triggerConfetti();
+        function initBoard() {
+            board = [
+                ['r','n','b','q','k','b','n','r'],
+                ['p','p','p','p','p','p','p','p'],
+                ['','','','','','','',''],
+                ['','','','','','','',''],
+                ['','','','','','','',''],
+                ['','','','','','','',''],
+                ['P','P','P','P','P','P','P','P'],
+                ['R','N','B','Q','K','B','N','R']
+            ];
+            turn = 'w';
+            gameOver = false;
+            selectedSquare = null;
+            document.getElementById('status').style.color = '#2ecc71';
+            document.getElementById('status').textContent = 'Đến lượt bạn';
+        }
+
+        function isWhite(piece) { return piece !== '' && piece === piece.toUpperCase(); }
+        function isBlack(piece) { return piece !== '' && piece === piece.toLowerCase(); }
+
+        function getPossibleMoves(r, c) {
+            const piece = board[r][c];
+            if (!piece) return [];
+            
+            const moves = [];
+            const isW = isWhite(piece);
+            const type = piece.toLowerCase();
+
+            function addMove(nr, nc) {
+                if (nr < 0 || nr > 7 || nc < 0 || nc > 7) return false;
+                const target = board[nr][nc];
+                if (target === '') {
+                    moves.push({r: nr, c: nc});
+                    return true;
                 }
-            } else if (game.in_draw()) {
-                statusEl.style.color = '#e67e22';
-                statusEl.textContent = 'VÁN ĐẤU HOÀ!';
-            } else if (game.in_check()) {
-                statusEl.style.color = '#e74c3c';
-                statusEl.textContent = game.turn() === 'w' ? 'Bạn đang bị chiếu!' : 'Máy đang bị chiếu!';
-            } else {
-                statusEl.style.color = '#2ecc71';
-                statusEl.textContent = game.turn() === 'w' ? 'Đến lượt bạn (Trắng)' : 'Máy đang suy nghĩ...';
+                if ((isW && isBlack(target)) || (!isW && isWhite(target))) {
+                    moves.push({r: nr, c: nc});
+                }
+                return false;
             }
+
+            if (type === 'p') {
+                const dir = isW ? -1 : 1;
+                if (r + dir >= 0 && r + dir <= 7 && board[r + dir][c] === '') {
+                    moves.push({r: r + dir, c: c});
+                    if ((isW && r === 6) || (!isW && r === 1)) {
+                        if (board[r + 2*dir][c] === '') moves.push({r: r + 2*dir, c: c});
+                    }
+                }
+                [-1, 1].forEach(dc => {
+                    const nr = r + dir, nc = c + dc;
+                    if (nr >= 0 && nr <= 7 && nc >= 0 && nc <= 7) {
+                        const target = board[nr][nc];
+                        if ((isW && isBlack(target)) || (!isW && isWhite(target))) {
+                            moves.push({r: nr, c: nc});
+                        }
+                    }
+                });
+            } else if (type === 'n') {
+                const offsets = [[-2,-1],[-2,1],[-1,-2],[-1,2],[1,-2],[1,2],[2,-1],[2,1]];
+                offsets.forEach(([dr, dc]) => addMove(r + dr, c + dc));
+            } else if (type === 'r' || type === 'b' || type === 'q') {
+                const dirs = [];
+                if (type === 'r' || type === 'q') dirs.push([-1,0],[1,0],[0,-1],[0,1]);
+                if (type === 'b' || type === 'q') dirs.push([-1,-1],[-1,1],[1,-1],[1,1]);
+                dirs.forEach(([dr, dc]) => {
+                    let nr = r + dr, nc = c + dc;
+                    while (addMove(nr, nc)) {
+                        nr += dr; nc += dc;
+                    }
+                });
+            } else if (type === 'k') {
+                const offsets = [[-1,-1],[-1,0],[-1,1],[0,-1],[0,1],[1,-1],[1,0],[1,1]];
+                offsets.forEach(([dr, dc]) => addMove(r + dr, c + dc));
+            }
+
+            return moves;
         }
 
         function renderBoard() {
+            const boardEl = document.getElementById('board');
             boardEl.innerHTML = '';
-            const board = game.board();
 
             for (let r = 0; r < 8; r++) {
                 for (let c = 0; c < 8; c++) {
                     const squareEl = document.createElement('div');
-                    const squareName = String.fromCharCode(97 + c) + (8 - r);
                     const isLight = (r + c) % 2 === 0;
 
                     squareEl.className = `square ${isLight ? 'white-sq' : 'dark-sq'}`;
-                    if (selectedSquare === squareName) squareEl.classList.add('selected');
+                    if (selectedSquare && selectedSquare.r === r && selectedSquare.c === c) {
+                        squareEl.classList.add('selected');
+                    }
 
                     const piece = board[r][c];
                     if (piece) {
-                        const symbolKey = piece.color === 'w' ? piece.type.toUpperCase() : piece.type;
                         const pieceSpan = document.createElement('span');
-                        pieceSpan.className = `piece-symbol ${piece.color === 'w' ? 'piece-w' : 'piece-b'}`;
-                        pieceSpan.textContent = pieceSymbols[symbolKey];
+                        pieceSpan.className = `piece-symbol ${isWhite(piece) ? 'piece-w' : 'piece-b'}`;
+                        pieceSpan.textContent = pieceSymbols[piece];
                         squareEl.appendChild(pieceSpan);
                     }
 
-                    squareEl.addEventListener('click', () => handleSquareClick(squareName));
+                    squareEl.addEventListener('click', () => handleSquareClick(r, c));
                     boardEl.appendChild(squareEl);
                 }
             }
-            updateStatus();
         }
 
-        function handleSquareClick(square) {
-            if (game.game_over() || game.turn() !== 'w') return;
+        function handleSquareClick(r, c) {
+            if (gameOver || turn !== 'w') return;
 
-            const piece = game.get(square);
+            const piece = board[r][c];
 
             if (!selectedSquare) {
-                if (piece && piece.color === 'w') {
-                    selectedSquare = square;
+                if (isWhite(piece)) {
+                    selectedSquare = {r, c};
                     renderBoard();
                 }
             } else {
-                const move = game.move({
-                    from: selectedSquare,
-                    to: square,
-                    promotion: 'q'
-                });
+                const moves = getPossibleMoves(selectedSquare.r, selectedSquare.c);
+                const canMove = moves.some(m => m.r === r && m.c === c);
 
-                if (move) {
+                if (canMove) {
+                    executeMove(selectedSquare.r, selectedSquare.c, r, c);
                     selectedSquare = null;
-                    renderBoard();
-                    if (!game.game_over()) {
-                        setTimeout(makeSmartAIMove, 300);
+                    if (!gameOver) {
+                        turn = 'b';
+                        document.getElementById('status').textContent = 'Đến lượt máy';
+                        setTimeout(makeAIMove, 400);
                     }
                 } else {
-                    if (piece && piece.color === 'w') {
-                        selectedSquare = square;
+                    if (isWhite(piece)) {
+                        selectedSquare = {r, c};
+                    } else {
+                        selectedSquare = null;
                     }
                     renderBoard();
                 }
             }
         }
 
-        function makeSmartAIMove() {
-            const moves = game.moves({ verbose: true });
-            
-            // Nếu máy hết nước đi -> Công nhận người chơi thắng
-            if (moves.length === 0) {
+        function executeMove(fromR, fromC, toR, toC) {
+            const targetPiece = board[toR][toC];
+            board[toR][toC] = board[fromR][fromC];
+            board[fromR][fromC] = '';
+
+            if (board[toR][toC] === 'P' && toR === 0) board[toR][toC] = 'Q';
+            if (board[toR][toC] === 'p' && toR === 7) board[toR][toC] = 'q';
+
+            renderBoard();
+
+            // Ăn Vua Đen -> Bạn Đã Thắng 🎉
+            if (targetPiece === 'k') {
+                gameOver = true;
+                const statusEl = document.getElementById('status');
                 statusEl.style.color = '#f1c40f';
-                statusEl.textContent = 'CHÚC MỪNG BẠN ĐÃ THẮNG! 🎉';
+                statusEl.textContent = 'Bạn Đã Thắng 🎉';
+                triggerConfetti();
+                return;
+            }
+
+            // Ăn Vua Trắng -> Bạn Đã Thua
+            if (targetPiece === 'K') {
+                gameOver = true;
+                const statusEl = document.getElementById('status');
+                statusEl.style.color = '#e74c3c';
+                statusEl.textContent = 'Bạn Đã Thua';
+                return;
+            }
+        }
+
+        function makeAIMove() {
+            if (gameOver) return;
+
+            const allMoves = [];
+
+            for (let r = 0; r < 8; r++) {
+                for (let c = 0; c < 8; c++) {
+                    if (isBlack(board[r][c])) {
+                        const moves = getPossibleMoves(r, c);
+                        moves.forEach(m => {
+                            allMoves.push({ fromR: r, fromC: c, toR: m.r, toC: m.c });
+                        });
+                    }
+                }
+            }
+
+            if (allMoves.length === 0) {
+                gameOver = true;
+                const statusEl = document.getElementById('status');
+                statusEl.style.color = '#f1c40f';
+                statusEl.textContent = 'Bạn Đã Thắng 🎉';
                 triggerConfetti();
                 return;
             }
 
             let bestMove = null;
-            let maxScore = -9999;
+            let maxScore = -99999;
 
-            for (let move of moves) {
+            allMoves.forEach(m => {
                 let score = 0;
-                
-                // Ưu tiên ăn quân
-                if (move.captured) {
-                    score += pieceValues[move.captured] * 10;
+                const targetPiece = board[m.toR][m.toC];
+
+                if (targetPiece === 'K') {
+                    score += 100000;
+                } else if (targetPiece !== '') {
+                    score += (pieceValues[targetPiece.toLowerCase()] || 10) * 10;
                 }
 
-                // Chiếu vua
-                game.move(move);
-                if (game.in_check()) score += 15;
-                if (game.in_checkmate()) score += 10000;
-                game.undo();
-
-                score += Math.random() * 2;
+                score += Math.random() * 3;
 
                 if (score > maxScore) {
                     maxScore = score;
-                    bestMove = move;
+                    bestMove = m;
                 }
+            });
+
+            if (bestMove) {
+                executeMove(bestMove.fromR, bestMove.fromC, bestMove.toR, bestMove.toC);
             }
 
-            game.move(bestMove);
-            renderBoard();
+            if (!gameOver) {
+                turn = 'w';
+                document.getElementById('status').textContent = 'Đến lượt bạn';
+            }
         }
 
         function resetGame() {
-            game.reset();
-            selectedSquare = null;
+            initBoard();
             renderBoard();
         }
 
+        initBoard();
         renderBoard();
     </script>
 </body>
