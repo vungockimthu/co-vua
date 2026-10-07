@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Game Cờ Vua Online</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
@@ -16,8 +17,17 @@
             align-items: center;
             justify-content: center;
             min-height: 100vh;
+            overflow: hidden;
         }
-        h1 { margin-bottom: 15px; font-size: 24px; color: #f1c40f; }
+        h1 { margin-bottom: 5px; font-size: 24px; color: #f1c40f; }
+        #status {
+            margin-bottom: 12px;
+            font-size: 18px;
+            font-weight: bold;
+            color: #2ecc71;
+            min-height: 26px;
+            text-align: center;
+        }
         #board {
             width: 90vw;
             max-width: 440px;
@@ -42,7 +52,7 @@
         .selected { background-color: #f7ec59 !important; }
         
         .piece-symbol {
-            font-size: clamp(32px, 9vw, 50px);
+            font-size: clamp(32px, 9vw, 48px);
             line-height: 1;
             filter: drop-shadow(0 2px 3px rgba(0,0,0,0.3));
         }
@@ -55,33 +65,69 @@
         }
         .btn {
             margin-top: 15px;
-            padding: 10px 20px;
-            font-size: 16px;
+            padding: 10px 24px;
+            font-size: 17px;
             background-color: #2ecc71;
             color: white;
             border: none;
             border-radius: 6px;
             cursor: pointer;
             font-weight: bold;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
         }
     </style>
 </head>
 <body>
 
     <h1>Game Cờ Vua Online</h1>
+    <div id="status">Đến lượt bạn (Trắng)</div>
     <div id="board"></div>
     <button class="btn" onclick="resetGame()">Ván Mới</button>
 
     <script>
         const game = new Chess();
         const boardEl = document.getElementById('board');
+        const statusEl = document.getElementById('status');
         let selectedSquare = null;
 
-        // Bộ ký hiệu Unicode chuẩn cho quân cờ
         const pieceSymbols = {
             'p': '♟', 'r': '♜', 'n': '♞', 'b': '♝', 'q': '♛', 'k': '♚',
             'P': '♙', 'R': '♖', 'N': '♘', 'B': '♗', 'Q': '♕', 'K': '♔'
         };
+
+        const pieceValues = { 'p': 10, 'n': 30, 'b': 30, 'r': 50, 'q': 90, 'k': 900 };
+
+        function triggerConfetti() {
+            if (typeof confetti === 'function') {
+                confetti({
+                    particleCount: 120,
+                    spread: 80,
+                    origin: { y: 0.6 }
+                });
+            }
+        }
+
+        function updateStatus() {
+            if (game.in_checkmate()) {
+                if (game.turn() === 'w') {
+                    statusEl.style.color = '#e74c3c';
+                    statusEl.textContent = 'RẤT TIẾC, BẠN ĐÃ THUA! 😿';
+                } else {
+                    statusEl.style.color = '#f1c40f';
+                    statusEl.textContent = 'CHÚC MỪNG BẠN ĐÃ THẮNG! 🎉';
+                    triggerConfetti();
+                }
+            } else if (game.in_draw()) {
+                statusEl.style.color = '#e67e22';
+                statusEl.textContent = 'VÁN ĐẤU HOÀ!';
+            } else if (game.in_check()) {
+                statusEl.style.color = '#e74c3c';
+                statusEl.textContent = game.turn() === 'w' ? 'Bạn đang bị chiếu!' : 'Máy đang bị chiếu!';
+            } else {
+                statusEl.style.color = '#2ecc71';
+                statusEl.textContent = game.turn() === 'w' ? 'Đến lượt bạn (Trắng)' : 'Máy đang suy nghĩ...';
+            }
+        }
 
         function renderBoard() {
             boardEl.innerHTML = '';
@@ -109,19 +155,20 @@
                     boardEl.appendChild(squareEl);
                 }
             }
+            updateStatus();
         }
 
         function handleSquareClick(square) {
+            if (game.game_over() || game.turn() !== 'w') return;
+
             const piece = game.get(square);
 
-            // Chọn quân cờ
             if (!selectedSquare) {
                 if (piece && piece.color === 'w') {
                     selectedSquare = square;
                     renderBoard();
                 }
             } else {
-                // Thử thực hiện nước đi
                 const move = game.move({
                     from: selectedSquare,
                     to: square,
@@ -129,14 +176,12 @@
                 });
 
                 if (move) {
-                    // Đi ĐÚNG LUẬT: Di chuyển quân + Máy tự đánh trả
                     selectedSquare = null;
                     renderBoard();
                     if (!game.game_over()) {
-                        setTimeout(makeAIMove, 300);
+                        setTimeout(makeSmartAIMove, 300);
                     }
                 } else {
-                    // Đi SAI LUẬT: Giữ nguyên quân đang chọn, hoặc đổi sang quân Trắng khác nếu bấm vào
                     if (piece && piece.color === 'w') {
                         selectedSquare = square;
                     }
@@ -145,11 +190,43 @@
             }
         }
 
-        function makeAIMove() {
-            const moves = game.moves();
-            if (moves.length === 0) return;
-            const randomMove = moves[Math.floor(Math.random() * moves.length)];
-            game.move(randomMove);
+        function makeSmartAIMove() {
+            const moves = game.moves({ verbose: true });
+            
+            // Nếu máy hết nước đi -> Công nhận người chơi thắng
+            if (moves.length === 0) {
+                statusEl.style.color = '#f1c40f';
+                statusEl.textContent = 'CHÚC MỪNG BẠN ĐÃ THẮNG! 🎉';
+                triggerConfetti();
+                return;
+            }
+
+            let bestMove = null;
+            let maxScore = -9999;
+
+            for (let move of moves) {
+                let score = 0;
+                
+                // Ưu tiên ăn quân
+                if (move.captured) {
+                    score += pieceValues[move.captured] * 10;
+                }
+
+                // Chiếu vua
+                game.move(move);
+                if (game.in_check()) score += 15;
+                if (game.in_checkmate()) score += 10000;
+                game.undo();
+
+                score += Math.random() * 2;
+
+                if (score > maxScore) {
+                    maxScore = score;
+                    bestMove = move;
+                }
+            }
+
+            game.move(bestMove);
             renderBoard();
         }
 
