@@ -42,4 +42,124 @@
         .selected { background-color: #f7ec59 !important; }
         
         .piece-symbol {
-            font
+            font-size: clamp(32px, 9vw, 50px);
+            line-height: 1;
+            filter: drop-shadow(0 2px 3px rgba(0,0,0,0.3));
+        }
+        .piece-w {
+            color: #ffffff;
+            text-shadow: 0 0 2px #000, 0 0 2px #000;
+        }
+        .piece-b {
+            color: #111111;
+        }
+        .btn {
+            margin-top: 15px;
+            padding: 10px 20px;
+            font-size: 16px;
+            background-color: #2ecc71;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Game Cờ Vua Online</h1>
+    <div id="board"></div>
+    <button class="btn" onclick="resetGame()">Ván Mới</button>
+
+    <script>
+        const game = new Chess();
+        const boardEl = document.getElementById('board');
+        let selectedSquare = null;
+
+        // Bộ ký hiệu Unicode chuẩn cho quân cờ
+        const pieceSymbols = {
+            'p': '♟', 'r': '♜', 'n': '♞', 'b': '♝', 'q': '♛', 'k': '♚',
+            'P': '♙', 'R': '♖', 'N': '♘', 'B': '♗', 'Q': '♕', 'K': '♔'
+        };
+
+        function renderBoard() {
+            boardEl.innerHTML = '';
+            const board = game.board();
+
+            for (let r = 0; r < 8; r++) {
+                for (let c = 0; c < 8; c++) {
+                    const squareEl = document.createElement('div');
+                    const squareName = String.fromCharCode(97 + c) + (8 - r);
+                    const isLight = (r + c) % 2 === 0;
+
+                    squareEl.className = `square ${isLight ? 'white-sq' : 'dark-sq'}`;
+                    if (selectedSquare === squareName) squareEl.classList.add('selected');
+
+                    const piece = board[r][c];
+                    if (piece) {
+                        const symbolKey = piece.color === 'w' ? piece.type.toUpperCase() : piece.type;
+                        const pieceSpan = document.createElement('span');
+                        pieceSpan.className = `piece-symbol ${piece.color === 'w' ? 'piece-w' : 'piece-b'}`;
+                        pieceSpan.textContent = pieceSymbols[symbolKey];
+                        squareEl.appendChild(pieceSpan);
+                    }
+
+                    squareEl.addEventListener('click', () => handleSquareClick(squareName));
+                    boardEl.appendChild(squareEl);
+                }
+            }
+        }
+
+        function handleSquareClick(square) {
+            const piece = game.get(square);
+
+            // Chọn quân cờ
+            if (!selectedSquare) {
+                if (piece && piece.color === 'w') {
+                    selectedSquare = square;
+                    renderBoard();
+                }
+            } else {
+                // Thử thực hiện nước đi
+                const move = game.move({
+                    from: selectedSquare,
+                    to: square,
+                    promotion: 'q'
+                });
+
+                if (move) {
+                    // Đi ĐÚNG LUẬT: Di chuyển quân + Máy tự đánh trả
+                    selectedSquare = null;
+                    renderBoard();
+                    if (!game.game_over()) {
+                        setTimeout(makeAIMove, 300);
+                    }
+                } else {
+                    // Đi SAI LUẬT: Giữ nguyên quân đang chọn, hoặc đổi sang quân Trắng khác nếu bấm vào
+                    if (piece && piece.color === 'w') {
+                        selectedSquare = square;
+                    }
+                    renderBoard();
+                }
+            }
+        }
+
+        function makeAIMove() {
+            const moves = game.moves();
+            if (moves.length === 0) return;
+            const randomMove = moves[Math.floor(Math.random() * moves.length)];
+            game.move(randomMove);
+            renderBoard();
+        }
+
+        function resetGame() {
+            game.reset();
+            selectedSquare = null;
+            renderBoard();
+        }
+
+        renderBoard();
+    </script>
+</body>
+</html>
