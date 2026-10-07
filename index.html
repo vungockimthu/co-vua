@@ -40,10 +40,17 @@
         .dark-sq { background-color: #769656; }
         .selected { background-color: #f7ec59 !important; }
         
-        .piece-img {
-            width: 85%;
-            height: 85%;
-            pointer-events: none;
+        .piece-symbol {
+            font-size: clamp(30px, 8vw, 48px);
+            line-height: 1;
+            filter: drop-shadow(0 2px 3px rgba(0,0,0,0.4));
+        }
+        .piece-w {
+            color: #ffffff;
+            text-shadow: 0 0 2px #000, 0 0 2px #000;
+        }
+        .piece-b {
+            color: #111111;
         }
         .btn {
             margin-top: 15px;
@@ -69,12 +76,10 @@
         const boardEl = document.getElementById('board');
         let selectedSquare = null;
 
-        // Ảnh quân cờ vector cực đẹp không bị lỗi ?
-        function getPieceImg(piece) {
-            const color = piece.color;
-            const type = piece.type.toUpperCase();
-            return `https://images.lichess.org/piece/cburnett/${color}${type}.svg`;
-        }
+        const pieceSymbols = {
+            'p': '♟', 'r': '♜', 'n': '♞', 'b': '♝', 'q': '♛', 'k': '♚',
+            'P': '♙', 'R': '♖', 'N': '♘', 'B': '♗', 'Q': '♕', 'K': '♔'
+        };
 
         function renderBoard() {
             boardEl.innerHTML = '';
@@ -91,10 +96,11 @@
 
                     const piece = board[r][c];
                     if (piece) {
-                        const img = document.createElement('img');
-                        img.src = getPieceImg(piece);
-                        img.className = 'piece-img';
-                        squareEl.appendChild(img);
+                        const symbolKey = piece.color === 'w' ? piece.type.toUpperCase() : piece.type;
+                        const pieceSpan = document.createElement('span');
+                        pieceSpan.className = `piece-symbol ${piece.color === 'w' ? 'piece-w' : 'piece-b'}`;
+                        pieceSpan.textContent = pieceSymbols[symbolKey];
+                        squareEl.appendChild(pieceSpan);
                     }
 
                     squareEl.addEventListener('click', () => handleSquareClick(squareName));
@@ -106,14 +112,12 @@
         function handleSquareClick(square) {
             const piece = game.get(square);
 
-            // Bấm chọn quân cờ màu Trắng
             if (!selectedSquare) {
                 if (piece && piece.color === 'w') {
                     selectedSquare = square;
                     renderBoard();
                 }
             } else {
-                // Thử di chuyển
                 const move = game.move({
                     from: selectedSquare,
                     to: square,
@@ -121,14 +125,12 @@
                 });
 
                 if (move) {
-                    // Nếu đi ĐÚNG LUẬT: Cho quân di chuyển + Máy đi lại ngay
                     selectedSquare = null;
                     renderBoard();
                     if (!game.game_over()) {
                         setTimeout(makeAIMove, 300);
                     }
                 } else {
-                    // Nếu đi SAI LUẬT (như bấm Tốt đi chéo): KHÔNG CHO ĐI, đổi sang chọn quân mới nếu bấm vào quân Trắng khác
                     if (piece && piece.color === 'w') {
                         selectedSquare = square;
                     }
