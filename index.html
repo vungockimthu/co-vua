@@ -19,12 +19,33 @@
             overflow: hidden;
         }
         #status {
-            margin-bottom: 20px;
+            margin-bottom: 12px;
             font-size: 22px;
             font-weight: bold;
             color: #2ecc71;
             min-height: 30px;
             text-align: center;
+        }
+        .difficulty-container {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        .diff-btn {
+            padding: 6px 14px;
+            font-size: 14px;
+            background-color: #333;
+            color: #ccc;
+            border: 2px solid #555;
+            border-radius: 20px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: all 0.2s;
+        }
+        .diff-btn.active {
+            background-color: #f1c40f;
+            color: #111;
+            border-color: #f1c40f;
         }
         #board {
             width: 90vw;
@@ -62,7 +83,7 @@
             color: #111111;
         }
         .btn {
-            margin-top: 20px;
+            margin-top: 15px;
             padding: 10px 24px;
             font-size: 17px;
             background-color: #2ecc71;
@@ -78,6 +99,13 @@
 <body>
 
     <div id="status">Đến lượt bạn</div>
+
+    <div class="difficulty-container">
+        <button class="diff-btn" id="btn-easy" onclick="setDifficulty('easy')">Dễ</button>
+        <button class="diff-btn active" id="btn-medium" onclick="setDifficulty('medium')">Trung bình</button>
+        <button class="diff-btn" id="btn-hard" onclick="setDifficulty('hard')">Khó</button>
+    </div>
+
     <div id="board"></div>
     <button class="btn" onclick="resetGame()">Ván Mới</button>
 
@@ -93,8 +121,15 @@
         let selectedSquare = null;
         let turn = 'w';
         let gameOver = false;
+        let currentDifficulty = 'medium'; // Default difficulty
 
-        // Âm thanh tiếng kèn ăn mừng bằng Web Audio API
+        function setDifficulty(level) {
+            currentDifficulty = level;
+            document.querySelectorAll('.diff-btn').forEach(btn => btn.classList.remove('active'));
+            document.getElementById(`btn-${level}`).classList.add('active');
+            resetGame();
+        }
+
         function playVictoryTrumpet() {
             try {
                 const ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -124,7 +159,6 @@
         function triggerConfetti() {
             playVictoryTrumpet();
             if (typeof confetti === 'function') {
-                // Hiệu ứng pháo hoa rơi từ trên xuống
                 let end = Date.now() + (2 * 1000);
                 (function frame() {
                     confetti({
@@ -297,7 +331,6 @@
 
             renderBoard();
 
-            // Ăn Vua Đen -> Bạn Đã Thắng 🎉
             if (targetPiece === 'k') {
                 gameOver = true;
                 const statusEl = document.getElementById('status');
@@ -307,7 +340,6 @@
                 return;
             }
 
-            // Ăn Vua Trắng -> Bạn Đã Thua
             if (targetPiece === 'K') {
                 gameOver = true;
                 const statusEl = document.getElementById('status');
@@ -343,25 +375,45 @@
             }
 
             let bestMove = null;
-            let maxScore = -99999;
 
-            allMoves.forEach(m => {
-                let score = 0;
-                const targetPiece = board[m.toR][m.toC];
-
-                if (targetPiece === 'K') {
-                    score += 100000;
-                } else if (targetPiece !== '') {
-                    score += (pieceValues[targetPiece.toLowerCase()] || 10) * 10;
-                }
-
-                score += Math.random() * 3;
-
-                if (score > maxScore) {
-                    maxScore = score;
-                    bestMove = m;
-                }
-            });
+            if (currentDifficulty === 'easy') {
+                // Chế độ Dễ: Đi hoàn toàn ngẫu nhiên
+                bestMove = allMoves[Math.floor(Math.random() * allMoves.length)];
+            } else if (currentDifficulty === 'medium') {
+                // Chế độ Trung bình: Ưu tiên ăn quân nhẹ nhàng, đôi khi đi ngẫu nhiên
+                let maxScore = -99999;
+                allMoves.forEach(m => {
+                    let score = 0;
+                    const targetPiece = board[m.toR][m.toC];
+                    if (targetPiece === 'K') {
+                        score += 100000;
+                    } else if (targetPiece !== '') {
+                        score += (pieceValues[targetPiece.toLowerCase()] || 10) * 5;
+                    }
+                    score += Math.random() * 10;
+                    if (score > maxScore) {
+                        maxScore = score;
+                        bestMove = m;
+                    }
+                });
+            } else {
+                // Chế độ Khó: Tính điểm ăn quân cao, ưu tiên ăn Vua tuyệt đối
+                let maxScore = -99999;
+                allMoves.forEach(m => {
+                    let score = 0;
+                    const targetPiece = board[m.toR][m.toC];
+                    if (targetPiece === 'K') {
+                        score += 100000;
+                    } else if (targetPiece !== '') {
+                        score += (pieceValues[targetPiece.toLowerCase()] || 10) * 20;
+                    }
+                    score += Math.random() * 2;
+                    if (score > maxScore) {
+                        maxScore = score;
+                        bestMove = m;
+                    }
+                });
+            }
 
             if (bestMove) {
                 executeMove(bestMove.fromR, bestMove.fromC, bestMove.toR, bestMove.toC);
@@ -383,3 +435,4 @@
     </script>
 </body>
 </html>
+
